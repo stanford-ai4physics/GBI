@@ -1,0 +1,9 @@
+numpy==1.26.2
+matplotlib==3.8.2
+pandas==2.1.3
+click==8.1.7
+awkward==2.6.2
+vector==1.4.0
+aliad==0.2.0.3
+quickstats==0.8.2.7.1
+tensorflow==2.15.0
