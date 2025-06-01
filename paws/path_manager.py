@@ -17,28 +17,31 @@ class PathManager(PathManagerBase):
         "param_dataset"        : ("processed_dataset", "{feature_level}/parameterised/{decay_mode}"),
         "output"               : "outputs",
         "plot"                 : ("output", "plots"),
+        "inference"            : ("output", "inference"),
         "landscape"            : ("output", "landscapes"),
-        "fisher"               : ("output", "fisher_information"),
+        "fisher"               : ("inference", "fisher"),
         "train_result"         : ("output", "train_results"),
         "combined_result"      : ("output", "summary"),
         "dedicated_supervised_result" : ("train_result", CHECKPOINT_DIR_FMTS[DEDICATED_SUPERVISED]),
         "param_supervised_result"     : ("train_result", CHECKPOINT_DIR_FMTS[PARAM_SUPERVISED]),
         "ideal_weakly_result"         : ("train_result", CHECKPOINT_DIR_FMTS[IDEAL_WEAKLY]),
-        "semi_weakly_result"          : ("train_result", CHECKPOINT_DIR_FMTS[SEMI_WEAKLY])
+        "semi_weakly_result"          : ("train_result", CHECKPOINT_DIR_FMTS[SEMI_WEAKLY]),
+        "train_metrics"        : ("{model_type}_result", "metrics_cache"),
+        "model_weights"        : ("{model_type}_result", "weights_cache"),
     }
 
     DEFAULT_FILES = {
-        "dedicated_dataset"           : ("dedicated_dataset", "SR_train_features_shard_{{shard_index}}.tfrecord"),
-        "param_dataset"               : ("param_dataset", "SR_train_features_shard_{{shard_index}}.tfrecord"),
+        "dedicated_dataset"           : ("dedicated_dataset", "SR_train_features_shard_{shard_index}.tfrecord"),
+        "param_dataset"               : ("param_dataset", "SR_train_features_shard_{shard_index}.tfrecord"),
         "train_config"                : ("{model_type}_result", "train_config.json"),
         "dataset_summary"             : ("{model_type}_result", "dataset_summary.json"),
         "model_full_train"            : ("{model_type}_result", "full_train.keras"),
-        "model_checkpoint"            : ("{model_type}_result", "model_weights_epoch_{{epoch:02d}}.h5"),
-        "metrics_checkpoint"          : ("{model_type}_result", "epoch_metrics/metrics_epoch_{{epoch}}.json"),
+        "model_checkpoint"            : ("{model_type}_result", "model_weights_epoch_{epoch:02d}.h5"),
+        "metrics_checkpoint"          : ("{model_type}_result", "epoch_metrics/metrics_epoch_{epoch:02d}.json"),
         "test_result"                 : ("{model_type}_result", "test_results.json"),
         "predicted_parameters"        : ("{model_type}_result", "predicted_parameters.json"),
-        "train_summary"               : ("{model_type}_result", "summary.json"),
-        "param_supervised_landscape"  : ("landscape", "param_supervised/{feature_level}/"
+        "train_metadata"              : ("{model_type}_result", "metadata.json"),
+        "supervised_landscape"        : ("landscape", "param_supervised/{feature_level}/{tag}/"
                                          "{ds_type}_{split_index}/{decay_mode}/landscape_{m1}_{m2}.json"),
         "semi_weakly_landscape"       : ("landscape", "semi_weakly/{feature_level}/{tag}/{mu_alpha}/"
                                          "{ds_type}_{split_index}/{decay_mode}/landscape_{m1}_{m2}.json"),

@@ -164,11 +164,13 @@ class ResultLoader(BaseLoader):
         include_metrics: bool = True,
         include_monitor: bool = True
     ) -> Dict:
-        path = os.path.join(checkpoint_dir, self.path_manager.get_basename("train_summary"))
+        if (not include_parameters) and (not include_metrics) and (not include_monitor):
+            return {}
+        path = os.path.join(checkpoint_dir, self.path_manager.get_basename("train_metadata"))
         if not os.path.exists(path):
             raise FileNotFoundError(f'File not found: {path}')
         with open(path) as file:
-            data = json.load(file)
+            data = json.load(file)['result_summary']
 
         result = {}
         
@@ -407,9 +409,11 @@ class ResultLoader(BaseLoader):
 
     def merge_trials(self, topk: Optional[int] = None,
                      model_types: Optional[List[ModelType]] = None,
+                     select: Optional[Dict] = None,
+                     reject: Optional[Dict] = None,
                      score_reduce_method: str = "mean",
                      weight_reduce_method: str = "median",
-                     mass_ordering: bool = False) -> None:
+                     mass_ordering: int = 0) -> None:
         """
         Merge weakly and semi-weakly results over initialization trials.
         
@@ -435,7 +439,7 @@ class ResultLoader(BaseLoader):
         for model_type in model_types:
             if model_type not in [SEMI_WEAKLY.key, IDEAL_WEAKLY.key]:
                 continue
-            df = self._get_dataframe(model_type)
+            df = self.get_dataframe(model_type, select=select, reject=reject)
             df = df[~df['trial'].isna()].copy()
             if 'output' not in df.columns:
                 raise RuntimeError(f'missing y_true and y_pred information from the '
@@ -443,9 +447,10 @@ class ResultLoader(BaseLoader):
             score_reduce = self._get_reduce_fn(score_reduce_method)
             weight_reduce = self._get_reduce_fn(weight_reduce_method)
             weight_columns = ['m1_pred', 'm2_pred', 'mu_pred', 'alpha_pred']
-            non_index_columns = weight_columns + ['trial', 'output']
-            columns = [c for c in df.columns if c not in non_index_columns]
-
+            index_columns = self.get_index_columns(df)
+            index_columns.remove('trial')
+            columns = [c for c in df.columns if c in index_columns]
+    
             merged_results = []
             for values, df_group in df.groupby(columns, dropna=False):
                 record = dict(zip(columns, values))
@@ -453,7 +458,7 @@ class ResultLoader(BaseLoader):
                 outputs = df_group['output'].values
                 y_trues = np.array([output.data['y_true'] for output in outputs])
                 y_preds = np.array([output.data['y_pred'] for output in outputs])            
-
+    
                 if topk is not None:
                     logloss = np.array([output.log_loss() for output in outputs])
                     indices = np.argsort(logloss)[:topk]
@@ -461,24 +466,25 @@ class ResultLoader(BaseLoader):
                     y_preds = y_preds[indices]
                 else:
                     indices = None
-
+    
                 if not (y_trues == y_trues[0]).all():
                     raise RuntimeError('y_true not the same across trials, please check your input')
-
+    
                 y_true = y_trues[0]
                 y_pred = score_reduce(y_preds, axis=0)
                 output = ModelOutput(y_true=y_true, y_pred=y_pred,
                                      verbosity=self.stdout.verbosity)
                 record['output'] = output
-
+                record['checkpoint_dir'] = None
+    
                 if model_type == SEMI_WEAKLY.key:
-                    if mass_ordering and record['m1'] != record['m2']:
+                    if mass_ordering and (record['m1'] != record['m2']):
                         m1_arr = df_group['m1_pred'].values
                         m2_arr = df_group['m2_pred'].values
                         m_arr = np.sort(np.array([m1_arr, m2_arr]), axis=0)
-                        df_group.loc[:, 'm1_pred'] = m_arr[1]
-                        df_group.loc[:, 'm2_pred'] = m_arr[0]
-
+                        df_group.loc[:, 'm1_pred'] = m_arr[int(mass_ordering > 0)]
+                        df_group.loc[:, 'm2_pred'] = m_arr[int(mass_ordering < 0)]
+    
                     for weight_column in weight_columns:
                         if weight_column in df_group.columns:
                             if indices is not None:
@@ -488,11 +494,10 @@ class ResultLoader(BaseLoader):
                             record[weight_column] = weight_reduce(weight_values)
                 
                 merged_results.append(record)
-
+    
             df_merged = pd.DataFrame(merged_results)
             df_merged['trial'] = df_merged['trial'].astype('Int64')
-            df = pd.concat([df, df_merged]).reset_index(drop=True)
-            self.dfs[model_type] = df
+            self.dfs[model_type] = pd.concat([self.dfs[model_type], df_merged]).reset_index(drop=True)
 
     MetricsOptionsType = List[Union[str, Tuple[str, str, Dict]]]
     

@@ -16,7 +16,7 @@ matplotlib==3.8.2
 pandas==2.1.3
 awkard==2.6.2
 vector==1.4.0
-aliad==0.2.0
+aliad==0.2.2.0
 quickstats==0.8.3.5.11
 tensorflow==2.15.0
 ```

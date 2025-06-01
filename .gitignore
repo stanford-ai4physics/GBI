@@ -5,3 +5,4 @@ __pycache__
 .__*
 .ipynb_checkpoints
 private/
+*.pyc

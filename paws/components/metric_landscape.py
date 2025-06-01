@@ -103,7 +103,7 @@ class MetricLandscape(AbstractObject):
             ModelLoader.set_model_weights(model, weights)
             encoded_str = ParamParser.val_encode_parameters(param_point)
             self.stdout.info(f"Running model prediction with {encoded_str}")
-
+            
             y_pred = model.predict(dataset).flatten()
             for metric in metrics:
                 metric_val = self._evaluate(metric, y_pred, y_true, label=label)
@@ -126,10 +126,14 @@ class MetricLandscape(AbstractObject):
 
         return outputs
 
-    def eval_supervised(self, model, dataset,
-                        param_expr: str,
-                        metrics: Optional[List[str]] = None,
-                        label: Optional[int] = None) -> Dict:
+    def eval_supervised(
+        self,
+        model,
+        dataset,
+        param_expr: str,
+        metrics: Optional[List[str]] = None,
+        label: Optional[int] = None
+    ) -> Dict:
         """
         Get prediction from a supervised model for the given dataset.
 
@@ -185,7 +189,6 @@ class MetricLandscape(AbstractObject):
             encoded_str = ParamParser.val_encode_parameters(param_point)
             ModelLoader.set_model_weights(param_model, param_point)
             self.stdout.info(f"Running model prediction with {encoded_str}")
-
             y_pred = param_model.predict(dataset).flatten()
             for metric in metrics:
                 metric_val = self._evaluate(metric, y_pred, y_true, label=label)

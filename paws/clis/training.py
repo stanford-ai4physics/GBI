@@ -14,24 +14,35 @@ __all__ = ["train_dedicated_supervised", "train_param_supervised",
 kCommonKeys = ["high_level", "decay_modes", "variables", "noise_dimension", "loss",
                "index_path", "split_index", "seed", "batchsize", "interrupt_freq",
                "cache_dataset", "datadir", "outdir", "version", "cache", "multi_gpu",
-               "epochs", "verbosity", "use_validation"]
+               "epochs", "verbosity", "use_validation", "model_save_freq",
+               "metric_save_freq", "weight_save_freq"]
 
 def train_model(model_type:str, **kwargs):
     from paws.components import ModelTrainer
     init_kwargs = {key: kwargs.pop(key) for key in kCommonKeys if key in kwargs}
     if 'cache_prior_dataset' in kwargs:
         kwargs['cache_dataset'] = kwargs.pop('cache_prior_dataset')
-    # dedicated supervised
+
+    # dedicated supervised or prior ratio
     if ('signal' in kwargs) and ('background' in kwargs):
-        sig_samples = list(set(split_str(kwargs.pop('signal'), sep=',', remove_empty=True)))
-        bkg_samples = list(set(split_str(kwargs.pop('background'), sep=',', remove_empty=True)))
+        if kwargs['signal'] is None:
+            kwargs.pop('signal')
+            sig_samples = []
+        else:
+            sig_samples = list(set(split_str(kwargs.pop('signal'), sep=',', remove_empty=True)))
+        if kwargs['background'] is None:
+            kwargs.pop('background')
+            bkg_samples = []
+        else:
+            bkg_samples = list(set(split_str(kwargs.pop('background'), sep=',', remove_empty=True)))
         if not set(sig_samples).isdisjoint(set(bkg_samples)):
             raise ValueError('Signal and background samples must be disjoint')
         kwargs['samples'] = sig_samples + bkg_samples
-        kwargs['supervised_label_map'] = {
-            **{sample: 0 for sample in bkg_samples},
-            **{sample: 1 for sample in sig_samples},
-        }
+        if model_type.lower() == 'dedicated_supervised':
+            kwargs['supervised_label_map'] = {
+                **{sample: 0 for sample in bkg_samples},
+                **{sample: 1 for sample in sig_samples},
+            }
     # weakly
     elif ('signal' in kwargs) and ('data_background' in kwargs):
         sig_samples = list(set(split_str(kwargs.pop('signal'), sep=',', remove_empty=True)))
@@ -53,9 +64,7 @@ def train_model(model_type:str, **kwargs):
                 kwargs['weakly_label_map'][sample] = 0
             elif sample in dat_bkg_samples:
                 kwargs['weakly_label_map'][sample] = 1
-    # prior ratio
-    elif ('background' in kwargs):
-        kwargs['samples'] = list(set(split_str(kwargs.pop('background'), sep=',', remove_empty=True)))
+
     init_kwargs['model_options'] = kwargs
     feature_level = "high_level" if init_kwargs.pop("high_level") else "low_level"
     model_trainer = ModelTrainer(model_type, **init_kwargs)
@@ -98,6 +107,10 @@ def train_model(model_type:str, **kwargs):
               help='Batch size for training.')
 @click.option('--interrupt-freq', default=None, type=int, show_default=True,
               help='Frequency of training interruption for early stopping.')
+@click.option('--model-save-freq', default='train', show_default=True,
+              help='Frequency of saving model checkpoints.')
+@click.option('--metric-save-freq', default='train', show_default=True,
+              help='Frequency of saving train metrics.')
 @click.option('--cache-dataset/--no-cache-dataset', default=None, show_default=True,
               help='Whether to cache the dataset during training.')
 @click.option('--use-validation/--no-validation', 'use_validation', default=True, show_default=True,
@@ -152,6 +165,10 @@ def train_dedicated_supervised(**kwargs):
               help='Batch size for training.')
 @click.option('--interrupt-freq', default=None, type=int, show_default=True,
               help='Frequency of training interruption for early stopping.')
+@click.option('--model-save-freq', default='epoch', show_default=True,
+              help='Frequency of saving model checkpoints.')
+@click.option('--metric-save-freq', default='epoch', show_default=True,
+              help='Frequency of saving train metrics.')
 @click.option('--cache-dataset/--no-cache-dataset', default=None, show_default=True,
               help='Whether to cache the dataset during training.')
 @click.option('--use-validation/--no-validation', 'use_validation', default=True, show_default=True,
@@ -185,6 +202,9 @@ def train_param_supervised(**kwargs):
               '\b\n by the indices they appear in the feature vector. For example,'
               '\b\n "3,5,6" means select the 4th, 6th and 7th feature from the jet'
               '\b\n feature vector to be used in the training.')
+@click.option('--signal', default=None,
+              show_default=True,
+              help='Signal samples to be used for prior ratio calculation (for interred method only).')
 @click.option('--background', default='QCD,extra_QCD',
               show_default=True,
               help='Background samples to be used for prior ratio calculation.')
@@ -205,6 +225,10 @@ def train_param_supervised(**kwargs):
               help='Batch size for computing prior dataset.')
 @click.option('--cache-dataset/--no-cache-dataset', default=None, show_default=True,
               help='Whether to cache the dataset used for sampling prior ratio.')
+@click.option('--model-save-freq', default='epoch', show_default=True,
+              help='Frequency of saving model checkpoints.')
+@click.option('--metric-save-freq', default='epoch', show_default=True,
+              help='Frequency of saving train metrics.')
 @click.option('-d', '--datadir', default=DEFAULT_DATADIR, show_default=True,
               help='Input directory where the tfrecord datasets are stored')
 @click.option('-o', '--outdir', default=DEFAULT_OUTDIR, show_default=True,
@@ -277,10 +301,20 @@ def train_prior_ratio(**kwargs):
               help='Batch size for training.')
 @click.option('--interrupt-freq', default=None, type=int, show_default=True,
               help='Frequency of training interruption for early stopping.')
+@click.option('--model-save-freq', default='train', show_default=True,
+              help='Frequency of saving model checkpoints.')
+@click.option('--metric-save-freq', default='train', show_default=True,
+              help='Frequency of saving train metrics.')
+@click.option('--train-data-size', default=None, type=int, show_default=True,
+              help='Restrict the number of background events as data (label = 1) used in training.')
+@click.option('--val-data-size', default=None, type=int, show_default=True,
+              help='Restrict the number of background events as data (label = 1) used in validation.')
 @click.option('--cache-dataset/--no-cache-dataset', default=None, show_default=True,
               help='Whether to cache the dataset during training.')
 @click.option('--use-validation/--no-validation', 'use_validation', default=True, show_default=True,
           help='Whether to use validation data in the training.')
+@click.option('--ref-bkg-test/--no-ref-bkg-test', default=False, show_default=True,
+          help='Whether to use reference background in test dataset.')
 @click.option('-d', '--datadir', default=DEFAULT_DATADIR, show_default=True,
               help='Input directory where the tfrecord datasets are stored')
 @click.option('-o', '--outdir', default=DEFAULT_OUTDIR, show_default=True,
@@ -344,6 +378,10 @@ def train_ideal_weakly(**kwargs):
               '\b\n will be created.')
 @click.option('-i', '--split-index', default=0, type=int, show_default=True,
               help='Index for dataset split.')
+@click.option('--fs-split-index', default=None, type=int, show_default=True,
+              help='Index for prior model dataset split. Use -1 to include prior '
+              'models from all dataset splits. If None, the same dataset split index '
+              'as the semi-weakly model will be used.')
 @click.option('--num-trials', default=10, type=int, show_default=True,
               help='Number of trials (random model initialization) to run.')
 @click.option('--fs-version', 'fs_version', default="v1", show_default=True,
@@ -364,12 +402,24 @@ def train_ideal_weakly(**kwargs):
               help='Batch size for training.')
 @click.option('--interrupt-freq', default=None, type=int, show_default=True,
               help='Frequency of training interruption for early stopping.')
+@click.option('--model-save-freq', default='train', show_default=True,
+              help='Frequency of saving model checkpoints.')
+@click.option('--metric-save-freq', default='train', show_default=True,
+              help='Frequency of saving train metrics.')
+@click.option('--weight-save-freq', default='train', show_default=True,
+              help='Frequency of saving model weights.')    
+@click.option('--train-data-size', default=None, type=int, show_default=True,
+              help='Restrict the number of background events as data (label = 1) used in training.')
+@click.option('--val-data-size', default=None, type=int, show_default=True,
+              help='Restrict the number of background events as data (label = 1) used in validation.')
 @click.option('--weight-clipping/--no-weight-clipping', default=True, show_default=True,
               help='Whether to apply weight clipping.')
 @click.option('--cache-dataset/--no-cache-dataset', default=None, show_default=True,
               help='Whether to cache the dataset during training.')
 @click.option('--use-validation/--no-validation', 'use_validation', default=True, show_default=True,
           help='Whether to use validation data in the training.')
+@click.option('--ref-bkg-test/--no-ref-bkg-test', default=False, show_default=True,
+          help='Whether to use reference background in test dataset.')
 @click.option('-d', '--datadir', default=DEFAULT_DATADIR, show_default=True,
               help='Input directory where the tfrecord datasets are stored')
 @click.option('-o', '--outdir', default=DEFAULT_OUTDIR, show_default=True,
