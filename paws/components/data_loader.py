@@ -15,7 +15,7 @@ from aliad.data.partition import optimize_split_sizes
 
 from paws.settings import FeatureLevel, HIGH_LEVEL, LOW_LEVEL
 from paws.settings import DecayMode, TWO_PRONG, THREE_PRONG
-from paws.settings import ModelType, DEDICATED_SUPERVISED, PARAM_SUPERVISED, SEMI_WEAKLY
+from paws.settings import ModelType, DEDICATED_SUPERVISED, PARAM_SUPERVISED, SEMI_WEAKLY, IDEAL_WEAKLY
 from paws.settings import Sample, NUM_SHARDS, SPLIT_FRACTIONS, BASE_SEED
 from paws.settings import DEFAULT_FEATURE_LEVEL, DEFAULT_DECAY_MODE, DEFAULT_DATADIR
 
@@ -318,7 +318,7 @@ class DataLoader(BaseLoader):
             DataFrame containing dataset specifications.
         """
         parameters = self._get_param_repr()
-        
+
         if mass_point is not None:
             dirname = "dedicated_dataset"
             m1, m2 = mass_point
@@ -342,7 +342,8 @@ class DataLoader(BaseLoader):
             dataset_paths = glob.glob(os.path.join(sample_dir, "*.tfrecord"))
             if not dataset_paths:
                 raise RuntimeError(f"No dataset files found for the sample '{sample.key}' under the directory '{sample_dir}'")
-            dataset_paths = sorted(dataset_paths, key=get_shard_index)
+            # do not sort paths!
+            # dataset_paths = sorted(dataset_paths, key=get_shard_index)
             specs['sample'].extend([sample.key] * len(dataset_paths))
             specs['dataset_path'].extend(dataset_paths)
             
@@ -374,7 +375,8 @@ class DataLoader(BaseLoader):
         self,
         df: pd.DataFrame,
         mu: Optional[float] = None,
-        alpha: Optional[float] = None
+        alpha: Optional[float] = None,
+        data_size: Optional[int] = None
     ) -> List[Dict]:
         composition = []
         # supervised dataset
@@ -435,6 +437,17 @@ class DataLoader(BaseLoader):
         else:
             raise ValueError('At least one background samples must have weakly label 1')
 
+        if data_size:
+            if (data_size > data_size_init):
+                raise RuntimeError(
+                    f'Not enough background events (available = {data_size_init},'
+                    f'requested = {data_size})'
+                )
+            else:
+                data_size_init = data_size
+                if ref_size > 0:
+                    ref_size = data_size_init
+
         if sizes['sig'] != sizes['data_sig']:
             raise ValueError('Invalid weakly label for signal samples (must be 1)')
         
@@ -490,7 +503,6 @@ class DataLoader(BaseLoader):
                 'paths': sample_df['dataset_path'].values,
                 'components': [{'name': get_key(sample_df), 'label': 1, 'skip': 0, 'take': size, 'size': sample_size}]
             })
-
         return composition
 
     def _get_sample_size_summary(self, sample_composition: List[Dict], batchsize: Optional[int] = None) -> Dict[str, int]:
@@ -576,7 +588,12 @@ class DataLoader(BaseLoader):
         split_index: int = 0,
         batchsize: Optional[int] = None,
         cache_dataset: Optional[bool] = None,
-        cache_test: bool = False
+        cache_test: bool = False,
+        train_data_size: Optional[int] = None,
+        val_data_size: Optional[int] = None,
+        test_data_size: Optional[int] = None,
+        weakly_test: bool = False,
+        ref_bkg_test: bool = False,
     ) -> Dict[str, "tf.data.Dataset"]:
         """
         Get datasets for training, validation, and testing.
@@ -651,10 +668,7 @@ class DataLoader(BaseLoader):
                                         exclude_params=exclude_masses)
         transforms = self._get_all_transforms(model_type, custom_params=custom_masses)
 
-        if model_type == SEMI_WEAKLY:
-            split_config = self.split_config_comp[split_index]
-        else:
-            split_config = self.split_config[split_index]
+        split_config = self.split_config[split_index]
         batchsize = self._suggest_batchsize(batchsize)
         cache_dataset = self._suggest_cache_dataset(cache_dataset)
 
@@ -668,11 +682,25 @@ class DataLoader(BaseLoader):
             cache = cache_dataset and (stage != 'test' or cache_test)
             distribute_strategy = self.distribute_strategy if stage != 'test' else None
             
-            stage_mask = spec_df['shard_index'].isin(split_config[stage])
-            stage_spec_df = spec_df[stage_mask]
+            split_df = pd.DataFrame({'shard_index': split_config[stage]})
+            stage_spec_df = split_df.merge(spec_df, on='shard_index', how='left')
+            if (model_type == SEMI_WEAKLY) and ((stage != 'test') or weakly_test):
+                stage_mu = mu
+            else:
+                stage_mu = None
+                
+            if stage == 'train':
+                stage_data_size = train_data_size
+            elif stage == 'val':
+                stage_data_size = val_data_size
+            else:
+                stage_data_size = test_data_size
 
-            stage_mu = mu if model_type == SEMI_WEAKLY and stage != 'test' else None
-            sample_composition = self._get_sample_composition(stage_spec_df, mu=stage_mu, alpha=alpha)
+            if (stage == 'test') and (model_type in [SEMI_WEAKLY, IDEAL_WEAKLY]) and (not ref_bkg_test):
+                stage_spec_df = stage_spec_df[(stage_spec_df['supervised_label'] != 0) | (stage_spec_df['weakly_label'] == 1)]
+                
+            sample_composition = self._get_sample_composition(stage_spec_df, mu=stage_mu, alpha=alpha,
+                                                              data_size=stage_data_size)
             summary[stage] = self._get_sample_size_summary(sample_composition, batchsize)
             ds = self._get_dataset_from_sample_composition(sample_composition, parse_tfrecord_fn,
                                                            transforms=transforms, filters=filters)

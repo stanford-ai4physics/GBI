@@ -9,6 +9,8 @@ from quickstats import semistaticmethod
 from quickstats.core.modules import get_module_version
 from quickstats.utils.string_utils import split_str
 
+from aliad.components.callbacks import LoggerSaveMode
+
 from paws.settings import (
     FeatureLevel, HIGH_LEVEL, LOW_LEVEL, TRAIN_FEATURES, ModelType, SEMI_WEAKLY, IDEAL_WEAKLY,
     MLP_LAYERS, INIT_MU, INIT_ALPHA, INIT_KAPPA,
@@ -164,7 +166,10 @@ class ModelLoader(BaseLoader):
         checkpoint_dir: str,
         model_type: Optional[Union[str, ModelType]] = None,
         weight_clipping: bool = True,
-        epochs: Optional[int] = None
+        epochs: Optional[int] = None,
+        model_save_freq: str = 'epoch',
+        metric_save_freq: str = 'epoch',
+        weight_save_freq: str = 'epoch'
     ):
         """
         Get the configuration for training.
@@ -188,7 +193,7 @@ class ModelLoader(BaseLoader):
                 'loss': 'MSE',
                 'epochs': epochs or 3000,
                 'optimizer': 'Adam',
-                'optimizer_config': {'learning_rate': 0.01},
+                'optimizer_config': {'learning_rate': 0.001},
                 'checkpoint_dir': checkpoint_dir,
                 'callbacks': {
                     'early_stopping': {
@@ -202,8 +207,8 @@ class ModelLoader(BaseLoader):
             return config
             
         if self.feature_level == HIGH_LEVEL:
-            epochs = epochs or 100
-            patience = 10
+            epochs = epochs or 200
+            patience = 20
         elif self.feature_level == LOW_LEVEL:
             epochs = epochs or 20
             patience = 5
@@ -218,7 +223,7 @@ class ModelLoader(BaseLoader):
             'metrics': metrics,
             'epochs': epochs,
             'optimizer': 'Adam',
-            'optimizer_config': {'learning_rate': 0.001},
+            'optimizer_config': {'learning_rate': 0.01},
             'checkpoint_dir': checkpoint_dir,
             'callbacks': {
                 'lr_scheduler': {
@@ -228,35 +233,43 @@ class ModelLoader(BaseLoader):
                     'min_lr': 1e-6
                 },
                 'early_stopping': {
-                    'monitor': 'val_loss',
+                    'monitor': monitor_metric,
                     'patience': patience,
                     'restore_best_weights': True,
                     'always_restore_best_weights': True
                 },
                 'model_checkpoint': {
                     'save_weights_only': True,
-                    'save_best_only': True,
-                    'save_freq': 'epoch'
+                    'save_best_only': False,
+                    'save_freq': model_save_freq
                 },
-                'metrics_logger': {'save_freq': 'epoch'}
+                'metrics_logger': {
+                    'save_freq': metric_save_freq
+                }
             }
         }
+        
+        if LoggerSaveMode.parse(model_save_freq) == LoggerSaveMode.TRAIN:
+            config['callbacks'].pop('model_checkpoint')
 
         if model_type and ModelType.parse(model_type) == SEMI_WEAKLY:
             
             config['callbacks']['weights_logger'] = {
-                'save_freq': 'epoch',
+                'save_freq': weight_save_freq,
                 'display_weight': True
             }                            
             
-            lr = 0.05
+            lr = 0.01
             if weight_clipping:
                 config['optimizer_config'].update({
                     'learning_rate': lr,
                     'clipvalue': 0.0001,
                     'clipnorm': 0.0001
                 })
-            config['callbacks']['early_stopping']['patience'] = 20
+            if self.loss == 'nll':
+                config['callbacks']['early_stopping']['patience'] = 30
+            else:
+                config['callbacks']['early_stopping']['patience'] = 20
             config['callbacks']['lr_scheduler'] = {
                 'initial_lr': lr,
                 'lr_decay_factor': 0.5,
@@ -281,7 +294,8 @@ class ModelLoader(BaseLoader):
 
     def _get_prior_ratio_model(self, feature_metadata: Dict):
         from tensorflow.keras import Model
-        from tensorflow.keras.layers import Dense, Normalization
+        from tensorflow.keras.layers import Dense, Normalization, Dropout
+        from tensorflow.keras import regularizers
         
         all_inputs = self.get_supervised_model_inputs(feature_metadata)
         param_feature = self._get_param_feature()
@@ -289,8 +303,14 @@ class ModelLoader(BaseLoader):
         inputs = [x]
         normalizer = Normalization()
         x = normalizer(x)
-        for nodes, activation in PRIOR_RATIO_NET_LAYERS:
-            x = Dense(nodes, activation)(x)
+        for nodes, activation, l2_val, dropout in PRIOR_RATIO_NET_LAYERS:
+            if l2_val is None:
+                kernel_regularizer = None
+            else:
+                kernel_regularizer = regularizers.l2(l2_val)
+            x = Dense(nodes, activation, kernel_regularizer=kernel_regularizer)(x)
+            if dropout is not None:
+                x = Dropout(dropout)(x)
         model = Model(inputs=inputs, outputs=x, name='PriorRatioNet')
         return model, normalizer
         
@@ -358,7 +378,6 @@ class ModelLoader(BaseLoader):
                   
         kwargs = {'feature_metadata': feature_metadata, 'parametric': parametric}
                                     
-         
         return self._distributed_wrapper(model_fn, **kwargs)
 
     @staticmethod
@@ -416,7 +435,8 @@ class ModelLoader(BaseLoader):
     def get_semi_weakly_weights(self, m1: float, m2: float,
                                 mu: Optional[float] = None,
                                 alpha: Optional[float] = None,
-                                use_sigmoid: bool = False):
+                                use_sigmoid: bool = False,
+                                use_regularizer: bool = True):
         """
         Get the weight parameters for constructing the semi-weakly model.
 
@@ -438,33 +458,36 @@ class ModelLoader(BaseLoader):
         """
         import tensorflow as tf
 
+        regularizers = {}
+        for parameter in ['m1', 'm2', 'mu', 'alpha']:
+            regularizers[parameter] = get_parameter_regularizer(parameter) if use_regularizer else None
         weights = {
             'm1': self.get_single_parameter_model(activation=get_parameter_transform('m1'),
                                                   kernel_initializer=tf.constant_initializer(float(m1)),
-                                                  kernel_regularizer=get_parameter_regularizer('m1'),
+                                                  kernel_regularizer=regularizers['m1'],
                                                   name='m1'),
             'm2': self.get_single_parameter_model(activation=get_parameter_transform('m2'),
                                                   kernel_initializer=tf.constant_initializer(float(m2)),
-                                                  kernel_regularizer=get_parameter_regularizer('m2'),
+                                                  kernel_regularizer=regularizers['m2'],
                                                   name='m2')
         }
         if mu is not None:
             weights['mu'] = self.get_single_parameter_model(activation=get_parameter_transform('mu'),
                                                             kernel_initializer=tf.constant_initializer(float(mu)),
-                                                            kernel_regularizer=get_parameter_regularizer('mu'),
+                                                            kernel_regularizer=regularizers['mu'],
                                                             name='mu')
             
         if alpha is not None:
             weights['alpha'] = self.get_single_parameter_model(activation=get_parameter_transform('alpha'),
                                                                kernel_initializer=tf.constant_initializer(float(alpha)),
-                                                               kernel_regularizer=get_parameter_regularizer('alpha'),
+                                                               kernel_regularizer=regularizers['alpha'],
                                                                name='alpha')
         return weights
 
     @staticmethod
     def _get_one_signal_semi_weakly_layer(fs_out, mu,
                                           kappa: float = 1.,
-                                          epsilon: float = 1e-6,
+                                          epsilon: float = 1e-10,
                                           bug_fix: bool = True):
         LLR = kappa * fs_out / (1. - fs_out + epsilon)
         LLR_xs = 1. + mu * (LLR - 1.)
@@ -478,7 +501,7 @@ class ModelLoader(BaseLoader):
     def _get_two_signal_semi_weakly_layer(fs_2_out, fs_3_out, mu, alpha,
                                           kappa_2: float = 1.,
                                           kappa_3: float = 1.,
-                                          epsilon: float = 1e-5,
+                                          epsilon: float = 1e-10,
                                           bug_fix: bool = True):
         LLR_2 = kappa_2 * fs_2_out / (1. - fs_2_out + epsilon)
         LLR_3 = kappa_3 * fs_3_out / (1. - fs_3_out + epsilon)
@@ -492,7 +515,7 @@ class ModelLoader(BaseLoader):
     @staticmethod
     def _get_one_signal_likelihood_layer(fs_out, mu,
                                          kappa: float = 1.,
-                                         epsilon: float = 1e-6):
+                                         epsilon: float = 1e-10):
         LLR = kappa * fs_out / (1. - fs_out + epsilon)
         LLR_xs = 1. + mu * (LLR - 1.)
         return LLR_xs  
@@ -501,20 +524,45 @@ class ModelLoader(BaseLoader):
     def _get_two_signal_likelihood_layer(fs_2_out, fs_3_out, mu, alpha,
                                          kappa_2: float = 1.,
                                          kappa_3: float = 1.,
-                                         epsilon: float = 1e-6):
+                                         epsilon: float = 1e-10):
         LLR_2 = kappa_2 * fs_2_out / (1. - fs_2_out + epsilon)
         LLR_3 = kappa_3 * fs_3_out / (1. - fs_3_out + epsilon)
         LLR_xs = 1. + mu * (alpha * LLR_3 + (1 - alpha) * LLR_2 - 1.)
         return LLR_xs
 
-    def _get_semi_weakly_model(self, feature_metadata: Dict, fs_model_path: str,
-                               m1: float = 0., m2: float = 0.,
-                               mu: float = INIT_MU, alpha: float = INIT_ALPHA,
-                               kappa: Union[str, float] = INIT_KAPPA,
-                               fs_model_path_2: Optional[str] = None,
-                               epsilon: float = 1e-6, 
-                               bug_fix: bool = True,
-                               use_sigmoid: bool = False) -> "keras.Model":
+    def _get_prior_out(
+        self,
+        x,
+        model_paths: Union[str, List[str]],
+        name: str = 'prior'
+    ):
+        from tensorflow.keras.layers import Average
+        if isinstance(model_paths, str):
+            model_paths = [model_paths]
+        prior_models = []
+        for i, model_path in enumerate(model_paths):
+            prior_model = self.load_model(model_path)
+            self.freeze_all_layers(prior_model)
+            prior_model._name = f"{name}_{i + 1}"
+            prior_models.append(prior_model)
+        return Average()([prior_model(x) for prior_model in prior_models])
+
+    def _get_semi_weakly_model(
+        self,
+        feature_metadata: Dict[str, Any],
+        fs_model_path: str | List[str],
+        m1: float = 0.,
+        m2: float = 0.,
+        mu: float = INIT_MU,
+        alpha: float = INIT_ALPHA,
+        kappa: str | float = INIT_KAPPA,
+        fs_model_path_2: Optional[str | List[str]] = None,
+        epsilon: float =  1e-10, 
+        bug_fix: bool = True,
+        use_sigmoid: bool = False,
+        use_regularizer:bool = True
+    ) -> "keras.Model":
+        
         import tensorflow as tf
         if get_module_version('keras') > (3, 0, 0):
             from keras.ops import ones_like
@@ -522,7 +570,12 @@ class ModelLoader(BaseLoader):
             ones_like = tf.ones_like
 
         inputs = self.get_supervised_model_inputs(feature_metadata)
-        weights = self.get_semi_weakly_weights(m1=m1, m2=m2, mu=mu, alpha=alpha, use_sigmoid=use_sigmoid)
+        weights = self.get_semi_weakly_weights(
+            m1=m1, m2=m2, mu=mu, alpha=alpha,
+            use_sigmoid=use_sigmoid,
+            use_regularizer=use_regularizer
+        )
+        self.semi_weakly_weight_models = weights
         m1_out = weights['m1'](ones_like(inputs['jet_features'])[:, 0, 0])
         m2_out = weights['m2'](ones_like(inputs['jet_features'])[:, 0, 0])
         mu_out = weights['mu'](ones_like(inputs['jet_features'])[:, 0, 0])
@@ -560,18 +613,19 @@ class ModelLoader(BaseLoader):
             
 
         if not multi_signal:
-            fs_model = self.load_model(fs_model_path)
-            fs_model._name = f"{fs_model.name}_1"
-            self.freeze_all_layers(fs_model)
+            fs_out = self._get_prior_out(
+                fs_inputs,
+                fs_model_path,
+                name='prior'
+            )
             kappa_out = get_kappa_out(kappa, fs_model_path)
-            fs_out = fs_model(fs_inputs)
             if self.loss != 'nll':
                 ws_out = self._get_one_signal_semi_weakly_layer(fs_out, mu=mu_out, kappa=kappa_out,
                                                                 epsilon=epsilon, bug_fix=bug_fix)
             else:
                 ws_out = self._get_one_signal_likelihood_layer(fs_out, mu=mu_out, kappa=kappa_out,
                                                                epsilon=epsilon)
-            LLR = kappa_out * fs_out / (1 - fs_out + 1e-6)
+            LLR = kappa_out * fs_out / (1 - fs_out + 1e-10)
             self.llr_model = tf.keras.Model(inputs=train_inputs, outputs=LLR, name='LLR')
             self.fs_model = tf.keras.Model(inputs=train_inputs, outputs=fs_out, name='Supervised')
         else:
@@ -585,17 +639,18 @@ class ModelLoader(BaseLoader):
                     raise ValueError(f'failed to interpret kappa value: {kappa}')
             else:
                 kappa_2, kappa_3 = kappa, kappa
-
-            fs_2_model = self.load_model(fs_model_path)
-            fs_2_model._name = f"{fs_2_model.name}_2prong"
-            self.freeze_all_layers(fs_2_model)
-            fs_3_model = self.load_model(fs_model_path_2)
-            fs_3_model._name = f"{fs_3_model.name}_3prong"
-            self.freeze_all_layers(fs_3_model)
             kappa_2_out = get_kappa_out(kappa_2, fs_model_path, "PriorRatioNet_2")
             kappa_3_out = get_kappa_out(kappa_3, fs_model_path_2, "PriorRatioNet_3")
-            fs_2_out = fs_2_model(fs_inputs)
-            fs_3_out = fs_3_model(fs_inputs)
+            fs_2_out = self._get_prior_out(
+                fs_inputs,
+                fs_model_path,
+                name='prior_2prong'
+            )
+            fs_3_out = self._get_prior_out(
+                fs_inputs,
+                fs_model_path_2,
+                name='prior_3prong'
+            )
             if self.loss != 'nll':
                 ws_out = self._get_two_signal_semi_weakly_layer(fs_2_out, fs_3_out, mu=mu_out,
                                                                 alpha=alpha_out, epsilon=epsilon,
@@ -605,8 +660,8 @@ class ModelLoader(BaseLoader):
                 ws_out = self._get_two_signal_likelihood_layer(fs_2_out, fs_3_out, mu=mu_out,
                                                                alpha=alpha_out, epsilon=epsilon,
                                                                kappa_2=kappa_2_out, kappa_3=kappa_3_out)
-            LLR_2 = kappa_out * fs_2_out / (1 - fs_2_out + 1e-6)
-            LLR_3 = kappa_out * fs_3_out / (1 - fs_3_out + 1e-6)
+            LLR_2 = kappa_out * fs_2_out / (1 - fs_2_out + 1e-10)
+            LLR_3 = kappa_out * fs_3_out / (1 - fs_3_out + 1e-10)
             self.llr_2_model = tf.keras.Model(inputs=train_inputs, outputs=LLR_2, name='TwoProngLLR')
             self.llr_3_model = tf.keras.Model(inputs=train_inputs, outputs=LLR_3, name='ThreeProngLLR')
             self.fs_2_model = tf.keras.Model(inputs=train_inputs, outputs=fs_2_out, name='TwoProngSupervised')
@@ -626,7 +681,8 @@ class ModelLoader(BaseLoader):
                               fs_model_path_2: Optional[str] = None,
                               epsilon: float = 1e-5,
                               bug_fix: bool = True,
-                              use_sigmoid: bool = False) -> "keras.Model":
+                              use_sigmoid: bool = False,
+                              use_regularizer: bool = True) -> "keras.Model":
         """
         Get the semi-weakly model.
 
@@ -669,7 +725,8 @@ class ModelLoader(BaseLoader):
             'fs_model_path_2': fs_model_path_2,
             'epsilon': epsilon,
             'bug_fix': bug_fix,
-            'use_sigmoid': use_sigmoid
+            'use_sigmoid': use_sigmoid,
+            'use_regularizer': use_regularizer
         }
         model_fn = self._get_semi_weakly_model
         return self._distributed_wrapper(model_fn, **kwargs)
@@ -850,14 +907,16 @@ class ModelLoader(BaseLoader):
         targets = list(targets) if targets is not None else list(config['callbacks'])
         if 'early_stopping' in targets:
             callbacks['early_stopping'] = EarlyStopping(**config['callbacks']['early_stopping'])
-            
+
         if 'model_checkpoint' in targets:
-            model_ckpt_filepath = os.path.join(checkpoint_dir,
-                                               self.path_manager.get_basename('model_checkpoint'))
+            basename = self.path_manager.get_basename('model_checkpoint', partial_format=True)
+            model_ckpt_filepath = os.path.join(checkpoint_dir, basename)
             callbacks['model_checkpoint'] = ModelCheckpoint(model_ckpt_filepath, **config['callbacks']['model_checkpoint'])
             
         if 'metrics_logger' in targets:
-            callbacks['metrics_logger'] = MetricsLogger(checkpoint_dir, **config['callbacks']['metrics_logger'])
+            basename = self.path_manager.get_directory('train_metrics', basename_only=True, partial_format=True)
+            metrics_cachedir = os.path.join(checkpoint_dir, basename)
+            callbacks['metrics_logger'] = MetricsLogger(metrics_cachedir, **config['callbacks']['metrics_logger'])
 
         if 'lr_scheduler' in targets:
             lr_scheduler = LearningRateScheduler(**config['callbacks']['lr_scheduler'])
@@ -865,7 +924,9 @@ class ModelLoader(BaseLoader):
 
         model_type = ModelType.parse(model_type)
         if (model_type == SEMI_WEAKLY) and ('weights_logger' in targets):
-            weights_logger = WeightsLogger(checkpoint_dir, **config['callbacks']['weights_logger'])
+            basename = self.path_manager.get_directory('model_weights', basename_only=True, partial_format=True)
+            weights_cachedir = os.path.join(checkpoint_dir, basename)
+            weights_logger = WeightsLogger(weights_cachedir, **config['callbacks']['weights_logger'])
             callbacks['weights_logger'] = weights_logger
 
         return callbacks
@@ -884,9 +945,9 @@ class ModelLoader(BaseLoader):
         checkpoint_dir : str 
             Directory for checkpoints.
         """
-        metrics_ckpt_filepath = os.path.join(checkpoint_dir,
-                                             self.path_manager.get_basename("metrics_checkpoint"))
-        model_ckpt_filepath = os.path.join(checkpoint_dir,
-                                           self.path_manager.get_basename("model_checkpoint"))
+        basename = self.path_manager.get_basename("metrics_checkpoint", partial_format=True)
+        metrics_ckpt_filepath = os.path.join(checkpoint_dir, basename)
+        basename = self.path_manager.get_basename("model_checkpoint", partial_format=True)
+        model_ckpt_filepath = os.path.join(checkpoint_dir, basename)
         early_stopping.restore(model, metrics_ckpt_filepath=metrics_ckpt_filepath,
                                model_ckpt_filepath=model_ckpt_filepath)

@@ -262,7 +262,7 @@ def process_lhco_data(
     import awkward as ak
     import vector
     vector.register_awkward()
-    
+
     if isinstance(source, str):
         df = pd.read_hdf(source)
     elif isinstance(source, pd.DataFrame):
@@ -343,7 +343,7 @@ def process_lhco_data(
         all_columns.extend(list(output_parameters))
     else:
         arrays = feature_arrays
-        
+
     return pd.DataFrame(arrays, columns=all_columns)
 
 def get_param_points(mass_range:Tuple[float, float]=MASS_RANGE,
@@ -364,7 +364,8 @@ def create_high_level_dedicated_datasets(
     njet: int = 2,
     num_shards:int=NUM_SHARDS,
     max_size: int = -1,
-    parallel:int=-1
+    parallel:int=-1,
+    custom_slice: Optional = ...,
 ):
     from aliad.interface.tensorflow import TFRecordMaker
     sample = Sample.parse(sample)
@@ -392,6 +393,8 @@ def create_high_level_dedicated_datasets(
     feature_columns = [f"{feature}j{i}" for i in range(1, njet + 1) for feature in features]
     # shape = (N_event, N_jet, N_feature)
     feature_array = df[feature_columns].values.reshape(-1, njet, len(features))
+    from pdb import set_trace
+    set_trace()
     if set(parameters).issubset(df.columns):
         param_array = df[list(parameters)].values
         param_points = np.unique(param_array, axis=0)
@@ -399,7 +402,7 @@ def create_high_level_dedicated_datasets(
         param_array = None
         param_points = get_param_points()
 
-    for param_point in param_points:
+    for param_point in param_points[custom_slice]:
         data = {}
         if param_array is not None:
             mask = np.all(param_array == param_point, axis=1)
@@ -414,7 +417,8 @@ def create_high_level_dedicated_datasets(
         # note this is hard-coded at the moment
         m1, m2 = param_point
         filename = path_manager.get_file("dedicated_dataset", feature_level="high_level",
-                                         sample=sample.key, m1=int(m1), m2=int(m2))
+                                         sample=sample.key, m1=int(m1), m2=int(m2),
+                                         partial_format=True)
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         stdout.info(f"Creating dedicated dataset for the sample {sample.key} (m1={int(m1)}, m2={int(m2)})")
         tfrecord_maker = TFRecordMaker(filename, data, num_shards=num_shards,
@@ -439,7 +443,8 @@ def create_parameterised_dataset(shard_index:int,
     path_manager = PathManager(directories={"dataset": datadir})
     for sample in samples:
         filename_expr = path_manager.get_file("dedicated_dataset", feature_level=feature_level,
-                                              sample=sample.key, m1="*", m2="*").format(shard_index=shard_index)
+                                              shard_index=shard_index,
+                                              sample=sample.key, m1="*", m2="*")
         filenames = glob.glob(filename_expr)
         if not filenames:
             raise RuntimeError(f'Cannot find datasets for the sample {sample.key} with '
@@ -455,12 +460,12 @@ def create_parameterised_dataset(shard_index:int,
     with open(metadata_filenames[0], 'r') as file:
             feature_metadata = json.load(file)['features']
     sample_size = np.sum(list(map(get_sample_size, metadata_filenames)))
-    
     decay_modes = [sample.decay_mode for sample in samples if sample.supervised_label == 1]
     decay_mode_str = PathManager._get_decay_mode_repr(decay_modes)
 
     outname = path_manager.get_file("param_dataset", feature_level=feature_level,
-                                    decay_mode=decay_mode_str).format(shard_index=shard_index)
+                                    shard_index=shard_index,
+                                    decay_mode=decay_mode_str)
     metadata_outname = get_metadata_path(outname)
     os.makedirs(os.path.dirname(outname), exist_ok=True)
     if cache and (os.path.exists(outname) and os.path.exists(metadata_outname)):

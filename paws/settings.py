@@ -45,10 +45,13 @@ class Sample(DescriptiveEnum):
     QCD       = (0, "QCD dijet background", "QCD", 0, -1, None, True)
     EXTRA_QCD = (1, "Extended QCD dijet background", "extra_QCD", 0, -1, None, True)
     W_QQ      = (2, "W'->X(qq)Y(qq) signal", "W_qq", 1, 1, TWO_PRONG, True)
-    W_QQQ     = (3, "W'->X(qq)Y(qqq) signal", "W_qqq", 1, 1, THREE_PRONG, True)
+    W_QQQ     = (3, "W'->X(qq)Y(qqq) signal", "W_qqq", 1, 1, THREE_PRONG, True)    
 
     QCD_GEN   = (4, 'QCD dijet background (generative)', 'QCD_gen', 0, 0, None, False)
     MIXED     = (5, 'Mixed sample', 'mixed', None, None, None, False)
+
+    EXTRA_W_QQ = (6, "Extended W'->X(qq)Y(qq) signal", "extra_W_qq", 1, 1, TWO_PRONG, True)
+    EXTRA_W_QQQ = (7, "Extended W'->X(qq)Y(qqq) signal", "extra_W_qqq", 1, 1, THREE_PRONG, True)
     
     def __new__(cls, value: int, description:str, key:str,
                 supervised_label: int, weakly_label: int,
@@ -101,9 +104,9 @@ MLP_LAYERS = [(256, 'relu'),
               (64, 'relu'),
               (1, 'sigmoid')]
 
-PRIOR_RATIO_NET_LAYERS = [(64, 'relu'),
-                          (32, 'relu'),
-                          (1, None)]
+PRIOR_RATIO_NET_LAYERS = [(64, 'relu', 0.0001, 0.1),
+                          (32, 'relu', 0.0001, 0.1),
+                          (1, None, None, None)]
 
 # names of trainable features as in dataset (ordering is important)
 TRAIN_FEATURES = {
@@ -165,5 +168,5 @@ SampleURLs = {
     EXTRA_QCD: "https://zenodo.org/records/8370758/files/events_anomalydetection_qcd_extra_inneronly_features.h5",
     W_QQ: "https://zenodo.org/records/11188685/files/events_anomalydetection_Z_XY_qq_parametric.h5",
     W_QQQ: "https://zenodo.org/records/11188685/files/events_anomalydetection_Z_XY_qqq_parametric.h5",
-    QCD_GEN: "events_anomalydetection_generativ_features.h5"
+    QCD_GEN: "events_anomalydetection_cathode_features.h5"
 }

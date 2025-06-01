@@ -37,12 +37,12 @@ def get_parameter_regularizer(parameter: str):
     from aliad.interface.keras.regularizers import MinMaxRegularizer
     
     if parameter in ['m1', 'm2']:
-        mass_range = (MASS_RANGE[0] * MASS_SCALE, MASS_RANGE[1] * MASS_SCALE)
+        mass_range = (85 * MASS_SCALE, MASS_RANGE[1] * MASS_SCALE, 1)
         return MinMaxRegularizer(*mass_range)
     elif parameter == 'mu':
         if SIGMOID_ACTIVATION:
             return MinMaxRegularizer(-10, -2, 10)
-        return MinMaxRegularizer(-10.0, 0.0)
+        return MinMaxRegularizer(-10.0, 0.0, 10)
     elif parameter == 'alpha':
         if SIGMOID_ACTIVATION:
             return None
