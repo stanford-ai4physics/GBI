@@ -1,0 +1,25 @@
+channels:
+  - nvidia
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12.7
+  - numpy=1.26.4
+  - matplotlib=3.10.3
+  - uproot=5.6.2
+  - awkward=2.8.3
+  - numba=0.61.2
+  - pip=25.1.1
+  - pytables=3.10.2
+  - root=6.34.04
+  - scikit-optimize=0.10.2
+  - pytorch::pytorch=2.5.1
+  - pytorch::pytorch-cuda=12.1
+  - pip:
+    - h5py==3.13.0
+    - law==0.1.20
+    - luigi==3.6.0
+    - scinum==2.2.0
+    - nflows==0.14
+    - quickstats==0.8.3.6
