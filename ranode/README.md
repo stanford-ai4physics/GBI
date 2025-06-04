@@ -4,7 +4,7 @@ This part of the code corresponds to the RANODE section in the paper ["Generator
 
 ## Installation
 
-The environment requirement for RANODE based inference is available in `requirements.txt`, it can be installed by running:
+The environment requirement for RANODE based inference is available in `environment.yml`, it can be installed by running:
 
 ```
 conda env create -f environment.yml --prefix /path/gbi_ranode_env
