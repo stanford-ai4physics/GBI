@@ -171,6 +171,8 @@ class ScanRANODE(
     BaseTask,
 ):
 
+    device = luigi.Parameter(default="cuda")
+
     def requires(self):
 
         model_results = {}
@@ -235,7 +237,7 @@ class ScanRANODE(
                 model_list = model_scan_dict[f"scan_index_{w_index}"]
 
                 prob_S, prob_B = ranode_pred(
-                    model_list, test_data_path, bkg_prob_test_path
+                    model_list, test_data_path, bkg_prob_test_path, device=self.device
                 )
 
                 # prob_S shape is (num_models, num_samples), prob_B shape is (num_samples,)
