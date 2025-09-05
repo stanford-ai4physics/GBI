@@ -13,7 +13,7 @@ from src.utils.utils import NumpyEncoder, str_encode_value
 from src.models.train_model_S import pred_model_S
 
 
-def ranode_pred(model_S_list, test_data_dict, bkg_prob_dir):
+def ranode_pred(model_S_list, test_data_dict, bkg_prob_dir, device="cuda"):
 
     # load data
     print("loading data")
@@ -39,7 +39,7 @@ def ranode_pred(model_S_list, test_data_dict, bkg_prob_dir):
     # make prediction using all models S in the list
     for model_S_i in model_S_list:
         print(model_S_i)
-        prob_S_i = pred_model_S(model_S_i, data_test_SR_S)
+        prob_S_i = pred_model_S(model_S_i, data_test_SR_S, device=device)
         prob_S_list.append(prob_S_i)
 
     prob_S = np.array(prob_S_list)
