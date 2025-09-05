@@ -264,10 +264,10 @@ class PredictBkgProbGen(
 
         config_file = os.path.join("src", "models", "DE_MAF_model.yml")
 
-        model_B = DensityEstimator(config_file, eval_mode=True, device="cuda")
+        model_B = DensityEstimator(config_file, eval_mode=True, device=self.device)
         best_model_dir = self.input()["bkg_model"]["bkg_model"].path
         model_B.model.load_state_dict(torch.load(best_model_dir))
-        model_B.model.to("cuda")
+        model_B.model.to(self.device)
         model_B.model.eval()
 
         # load the sample to compare with

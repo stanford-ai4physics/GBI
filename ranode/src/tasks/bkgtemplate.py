@@ -408,10 +408,10 @@ class PredictBkgProb(
         model_Bs = []
 
         for i in range(self.num_bkg_templates):
-            model_B = DensityEstimator(config_file, eval_mode=True, device="cuda")
+            model_B = DensityEstimator(config_file, eval_mode=True, device=self.device)
             best_model_dir = self.input()["bkg_models"][i]["bkg_model"].path
             model_B.model.load_state_dict(torch.load(best_model_dir))
-            model_B.model.to("cuda")
+            model_B.model.to(self.device)
             model_B.model.eval()
             model_Bs.append(model_B)
 
@@ -449,7 +449,7 @@ class PredictBkgProb(
                 )
                 # set all nans to 0
                 log_B_test[torch.isnan(log_B_test)] = 0
-                log_B_test_list.append
+                # log_B_test_list.append
                 log_B_test_list.append(log_B_test.cpu().numpy())
 
         log_B_trainval = np.array(log_B_trainval_list)
