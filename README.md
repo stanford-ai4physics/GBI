@@ -1,4 +1,4 @@
-This repository contains the code used in the paper ["Generator Based Inference (GBI)"](https://arxiv.org/abs/2405.08889) by Chi Lung Cheng, Ranit Das, Runze Li, Radha Mastandrea, Vinicius Mikuni, Benjamin Nachman, David Shih and Gup Singh.
+This repository contains the code used in the paper ["Generator Based Inference (GBI)"](https://arxiv.org/abs/2506.00119) by Chi Lung Cheng, Ranit Das, Runze Li, Radha Mastandrea, Vinicius Mikuni, Benjamin Nachman, David Shih and Gup Singh.
 
 ## Introduction
 
