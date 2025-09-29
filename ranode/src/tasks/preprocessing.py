@@ -77,7 +77,7 @@ class ProcessSignal(SignalStrengthMixin, ProcessMixin, BaseTask):
 
 class ProcessBkg(BaseTask):
     """
-    Will reprocess the signal such that they have shape (N, 6) where N is the number of events.
+    Will reprocess the background such that they have shape (N, 6) where N is the number of events.
     The columns are:
     (mjj, mj1, delta_mj=mj2-mj1, tau21j1=tau2j1/tau1j1, tau21j2=tau2j2/tau1j2, label=0)
 
