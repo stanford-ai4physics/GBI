@@ -66,6 +66,6 @@ law run SignalGenerationPlot --version test_0 --mx 100 --my 500 --num-ensemble 1
 
 To run the code on CPU, one can run:
 ```
-law run FittingScanResults   --version simplified_test_2 --mx 100 --my 500 --s-ratio-index 11 --FittingScanResults-device cpu --BkgTemplateTraining-device cpu --BkgTemplateChecking-device cpu --PerfectBkgTemplateTraining-device cpu --RNodeTemplate-device cpu --PredictBkgProb-device cpu --ScanRANODE-device cpu --SampleModelBinSR-device cpu --PredictBkgProbGen-device cpu
+law run FittingScanResults   --version cpu_test_0 --mx 100 --my 500 --s-ratio-index 11 --FittingScanResults-device cpu --BkgTemplateTraining-device cpu --BkgTemplateChecking-device cpu --PerfectBkgTemplateTraining-device cpu --RNodeTemplate-device cpu --PredictBkgProb-device cpu --ScanRANODE-device cpu --SampleModelBinSR-device cpu --PredictBkgProbGen-device cpu
 ```
 
