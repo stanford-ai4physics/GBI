@@ -1,0 +1,22 @@
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy=1.26
+  - matplotlib=3.8
+  - uproot=5.3
+  - awkward=2.4
+  - numba=0.59
+  - pip
+  - pytables=3.9
+  - scikit-optimize=0.10
+  - pytorch::pytorch=2.5
+  - pip:
+    - h5py==3.10.0
+    - law==0.1.20
+    - luigi==3.6.0
+    - scinum==2.2.0
+    - nflows==0.14
+    - quickstats==0.8.3.6

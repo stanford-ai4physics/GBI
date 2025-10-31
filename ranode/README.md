@@ -4,68 +4,228 @@ This part of the code corresponds to the RANODE section in the paper ["Generator
 
 ## Installation
 
+### Linux Installation
+
 The environment requirement for RANODE based inference is available in `environment.yml`, it can be installed by running:
 
-```
+```bash
 conda env create -f environment.yml --prefix /path/gbi_ranode_env
 ```
 
 To setup the rest of environment variables, run
 
-```
+```bash
 source setup.sh
 ```
 
 During first executation, user will be prompted to enter the input and output directory. The input directory should contain the files listed in the Dataset section.
 
+### macOS (Apple Silicon M-series) Installation
+
+For M1/M2/M3 Macs, use the Mac-specific environment file:
+
+```bash
+# Navigate to the parent GBI directory
+cd /path/to/GBI
+
+# Create conda environment using environment_mac.yml
+conda env create -f ranode/environment_mac.yml -n gbi_ranode
+
+# Or create it locally in the project
+conda env create -f ranode/environment_mac.yml --prefix ./.conda-envs/gbi_ranode
+
+# Install paws-sbi package
+conda activate gbi_ranode  # or: conda activate ./.conda-envs/gbi_ranode
+pip install git+https://github.com/hep-lbdl/paws-sbi.git
+
+# Create data and output directories
+mkdir -p data output
+
+# Configure data/output paths
+echo 'export OUTPUT_DIR="/path/to/GBI/output"' > ranode/.config
+echo 'export DATA_DIR="/path/to/GBI/data"' >> ranode/.config
+```
+
+**Convenience Activation Script**: Use the provided `activate_gbi.sh` script that sets up all paths automatically:
+
+```bash
+source activate_gbi.sh
+cd ranode
+```
+
+This script will:
+- Activate the conda environment
+- Set up PYTHONPATH to include the ranode directory
+- Configure LAW_HOME and LAW_CONFIG_FILE
+- Load data/output directory paths
+
 ## Dataset
 
-- Simulated QCD background from official LHCO dataset: https://zenodo.org/records/4536377/files/events_anomalydetection_v2.features.h5
-- Extra simulated QCD background : https://zenodo.org/records/8370758/files/events_anomalydetection_qcd_extra_inneronly_features.h5
-- Extended parametric W->X(qq)Y(qq) signal : https://zenodo.org/records/15384386/files/events_anomalydetection_extended_Z_XY_qq_parametric.h5
-- Signal ensembles with trainvaltest splitting : lumi_matched_train_val_test_split_signal_features_W_qq.h5
+The following datasets are required and should be placed in your `DATA_DIR` (default: `data/` directory):
+
+- **Simulated QCD background from official LHCO dataset**: https://zenodo.org/records/4536377/files/events_anomalydetection_v2.features.h5
+- **Extra simulated QCD background**: https://zenodo.org/records/8370758/files/events_anomalydetection_qcd_extra_inneronly_features.h5
+- **Extended parametric W->X(qq)Y(qq) signal**: https://zenodo.org/records/15384386/files/events_anomalydetection_extended_Z_XY_qq_parametric.h5
+- **Signal ensembles with trainvaltest splitting**: lumi_matched_train_val_test_split_signal_features_W_qq.h5
+
+### Downloading Datasets
+
+You can download all datasets using `curl`:
+
+```bash
+cd data/
+
+# Official LHCO QCD background (71 MB)
+curl -L -O "https://zenodo.org/records/4536377/files/events_anomalydetection_v2.features.h5"
+
+# Extra QCD background (37 MB)
+curl -L -O "https://zenodo.org/records/8370758/files/events_anomalydetection_qcd_extra_inneronly_features.h5"
+
+# Extended parametric signal (11 GB - this will take a while)
+curl -L -O "https://zenodo.org/records/15384386/files/events_anomalydetection_extended_Z_XY_qq_parametric.h5"
+```
+
+**Note**: The extended parametric signal dataset is 11 GB and may take significant time to download.
 
 
 ## Tutorials
 
-["Luigi Analysis Workflow (LAW)"](https://github.com/riga/law) is used to construct this project. First, one needs to setup the law task list by running
-```
+["Luigi Analysis Workflow (LAW)"](https://github.com/riga/law) is used to construct this project. First, one needs to setup the law task list by running:
+
+**For Linux:**
+```bash
 conda activate /path/gbi_ranode_env
 source setup.sh
+law index
+```
 
+**For macOS:**
+```bash
+source activate_gbi.sh
+cd ranode
 law index
 ```
 
 After this different tasks can be run with law by commands like:
 
-```
+```bash
 law run taskname --version output_postfix --flags XXX
 ```
 
 ## Command Line Interface
 
+### Basic Examples (GPU/CUDA for Linux)
+
 To get likelihood scanning plot at one signal injection strength, one can run:
-```
+```bash
 law run FittingScanResults --version test_0 --ensemble 1 --mx 100 --my 500 --s-ratio-index 11 --workers 3
 ```
-where --ensemble sets the dataset ensemble used in this scan, --mx and --my specify the mass of signal model, and --s-ratio-index represents the index of true signal injection strength. The flag --workers specifies the number of threads used.
-
+where:
+- `--ensemble` sets the dataset ensemble used in this scan
+- `--mx` and `--my` specify the mass of signal model
+- `--s-ratio-index` represents the index of true signal injection strength
+- `--workers` specifies the number of threads used
 
 To get the likelihood scanning at different signal strengths, with 10 ensembles to smooth the performance, one can run:
-```
+```bash
 law run ScanOverTrueMuEnsembleAvg --version test_0 --mx 100 --my 500 --num-ensemble 10 --workers 3
 ```
 
 To plot the jet mass learned and generated by the model, one can run:
-
-```
+```bash
 law run SignalGenerationPlot --version test_0 --mx 100 --my 500 --num-ensemble 10 --num-generated-sigs 1000000 --workers 3
 ```
 
-## Running on CPU
+### Running on macOS with Apple Silicon GPU (MPS)
 
-To run the code on CPU, one can run:
+**Apple M-series chips (M1/M2/M3) support GPU acceleration via Metal Performance Shaders (MPS).** This provides significant speedup over CPU-only execution.
+
+To check if MPS is available:
+```bash
+python -c "import torch; print('MPS available:', torch.backends.mps.is_available())"
 ```
-law run FittingScanResults   --version cpu_test_0 --mx 100 --my 500 --s-ratio-index 11 --FittingScanResults-device cpu --BkgTemplateTraining-device cpu --BkgTemplateChecking-device cpu --PerfectBkgTemplateTraining-device cpu --RNodeTemplate-device cpu --PredictBkgProb-device cpu --ScanRANODE-device cpu --SampleModelBinSR-device cpu --PredictBkgProbGen-device cpu
+
+**Basic likelihood scanning with GPU:**
+```bash
+law run FittingScanResults \
+  --version mps_test_0 \
+  --ensemble 1 \
+  --mx 100 \
+  --my 500 \
+  --s-ratio-index 11 \
+  --workers 1 \
+  --FittingScanResults-device mps \
+  --BkgTemplateTraining-device mps \
+  --BkgTemplateChecking-device mps \
+  --PerfectBkgTemplateTraining-device mps \
+  --RNodeTemplate-device mps \
+  --PredictBkgProb-device mps \
+  --ScanRANODE-device mps \
+  --SampleModelBinSR-device mps \
+  --PredictBkgProbGen-device mps
 ```
+
+**Scanning over multiple signal strengths with GPU:**
+```bash
+law run ScanOverTrueMuEnsembleAvg \
+  --version mps_test_0 \
+  --mx 100 \
+  --my 500 \
+  --num-ensemble 10 \
+  --workers 1 \
+  --ScanOverTrueMuEnsembleAvg-device mps \
+  --BkgTemplateTraining-device mps \
+  --BkgTemplateChecking-device mps \
+  --PerfectBkgTemplateTraining-device mps \
+  --RNodeTemplate-device mps \
+  --PredictBkgProb-device mps \
+  --ScanRANODE-device mps \
+  --SampleModelBinSR-device mps \
+  --PredictBkgProbGen-device mps
+```
+
+**Signal generation plot with GPU:**
+```bash
+law run SignalGenerationPlot \
+  --version mps_test_0 \
+  --mx 100 \
+  --my 500 \
+  --num-ensemble 10 \
+  --num-generated-sigs 1000000 \
+  --workers 1 \
+  --SignalGenerationPlot-device mps \
+  --BkgTemplateTraining-device mps \
+  --RNodeTemplate-device mps \
+  --PredictBkgProb-device mps
+```
+
+**Note for macOS users:**
+- Use `--workers 1` to avoid multiprocessing issues with MPS
+- Results will be saved to the `OUTPUT_DIR` specified in `ranode/.config`
+- GPU acceleration significantly speeds up model training compared to CPU
+
+### Running on CPU Only
+
+For systems without GPU support or for testing, you can run on CPU by setting all device flags to `cpu`:
+
+```bash
+law run FittingScanResults \
+  --version cpu_test_0 \
+  --ensemble 1 \
+  --mx 100 \
+  --my 500 \
+  --s-ratio-index 11 \
+  --workers 1 \
+  --FittingScanResults-device cpu \
+  --BkgTemplateTraining-device cpu \
+  --BkgTemplateChecking-device cpu \
+  --PerfectBkgTemplateTraining-device cpu \
+  --RNodeTemplate-device cpu \
+  --PredictBkgProb-device cpu \
+  --ScanRANODE-device cpu \
+  --SampleModelBinSR-device cpu \
+  --PredictBkgProbGen-device cpu
+```
+
+**Performance Note:** CPU-only execution will be significantly slower than GPU execution, especially for model training tasks.
 
