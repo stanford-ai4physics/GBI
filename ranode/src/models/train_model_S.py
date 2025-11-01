@@ -80,11 +80,12 @@ def train_model_S(
     traintensor_B = torch.from_numpy(data_train_SR_B.astype("float32")).to(device)
     valtensor_B = torch.from_numpy(data_val_SR_B.astype("float32")).to(device)
     # p(m) for bkg model p(x|m)
+    # Convert to float32 for MPS compatibility (Apple Silicon doesn't support float64)
     train_mass_prob_B = torch.from_numpy(
-        density_back.pdf(traintensor_B[:, 0].cpu().detach().numpy())
+        density_back.pdf(traintensor_B[:, 0].cpu().detach().numpy()).astype("float32")
     ).to(device)
     val_mass_prob_B = torch.from_numpy(
-        density_back.pdf(valtensor_B[:, 0].cpu().detach().numpy())
+        density_back.pdf(valtensor_B[:, 0].cpu().detach().numpy()).astype("float32")
     ).to(device)
 
     print("data loaded")
