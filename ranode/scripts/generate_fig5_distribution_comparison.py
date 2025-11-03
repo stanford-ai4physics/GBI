@@ -5,7 +5,7 @@ produced by the full LAW pipeline run.
 The script
   * selects a trained signal model `model_S.pt` (best validation loss by default),
   * samples from the learned density in feature space,
-  * converts both data and samples back to the original (time, H, L, H+L, H-L)
+  * converts both data and samples back to the original (H, L, H+L, H-L)
     coordinates using the recorded preprocessing parameters, and
   * compares the learned signal to the true signal/background that actually
     entered training (after all masks).
