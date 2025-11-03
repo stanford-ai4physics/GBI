@@ -27,7 +27,7 @@ from src.tasks.preprocessing import PreprocessingFold, ProcessBkg
 class BkgTemplateTraining(TemplateRandomMixin, BaseTask):
     device = luigi.Parameter(default="cuda")
     batchsize = luigi.IntParameter(default=2048)
-    epochs = luigi.IntParameter(default=20)
+    epochs = luigi.IntParameter(default=200)
     early_stopping_patience = luigi.IntParameter(default=20)
 
     def requires(self):

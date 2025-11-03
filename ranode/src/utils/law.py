@@ -112,7 +112,7 @@ class FoldSplitUncertaintyMixin:
 
 class BkgTemplateUncertaintyMixin:
 
-    num_bkg_templates = luigi.IntParameter(default=1)
+    num_bkg_templates = luigi.IntParameter(default=20)
 
     def store_parts(self):
         return super().store_parts() + (f"num_templates_{self.num_bkg_templates}",)
@@ -140,7 +140,7 @@ class BkgModelMixin:
 class SigTemplateTrainingUncertaintyMixin:
 
     # controls the random seed for the training
-    train_num_sig_templates = luigi.IntParameter(default=1)
+    train_num_sig_templates = luigi.IntParameter(default=20)
 
     def store_parts(self):
         return super().store_parts() + (
@@ -152,7 +152,7 @@ class WScanMixin:
 
     w_min = luigi.FloatParameter(default=1e-5)
     w_max = luigi.FloatParameter(default=0.1)
-    scan_number = luigi.IntParameter(default=5)
+    scan_number = luigi.IntParameter(default=20)
 
     def store_parts(self):
         return super().store_parts() + (

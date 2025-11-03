@@ -34,12 +34,12 @@ def gen_bg():
     A = 0.0
     return gen_data(A,T,delta,0.25)
 
-def gen_data(A, T, delta, noise):
+def gen_data(A, T, delta, noise, num_events=10000):
     """Generate simulated gravitational wave detector data.
-    
+
     Creates toy data mimicking gravitational wave signals in dual detectors
     with configurable amplitude, period, time delay, and noise levels.
-    
+
     Parameters
     ----------
     A : float
@@ -50,19 +50,21 @@ def gen_data(A, T, delta, noise):
         Time delay between detectors in milliseconds
     noise : float
         Gaussian noise standard deviation
-        
+    num_events : int, default=10000
+        Number of events to generate
+
     Returns
     -------
-    numpy.ndarray, shape (100, 5)
+    numpy.ndarray, shape (num_events, 5)
         Generated data with columns [time, H_detector, L_detector, H+L, H-L]
-        
+
     Notes
     -----
     This is a toy model for testing R-Anode methodology on simple
     time-series data before applying to particle physics datasets.
     """
     data = []
-    for t in np.linspace(0,300,num=300): #ms
+    for t in np.linspace(0, 300, num=num_events): #ms
         h = A * np.sin(2*np.pi*t / T) * scipy.stats.norm.pdf(t,loc=150,scale=20) + np.random.normal(scale=noise)
         l = A * np.sin(2*np.pi*(t+delta) / T)* scipy.stats.norm.pdf(t,loc=150+delta,scale=20) + np.random.normal(scale=noise)
         data.append( [ t,h,l, h+l, h-l])
@@ -85,8 +87,8 @@ plt.clf()
 
 plt.plot(bdata[:,0],bdata[:,1],label="H")
 plt.plot(bdata[:,0],bdata[:,2],label="L")
-plt.plot(bdata[:,0],bdata[:,1]+bdata[:,1],label="H+L",linestyle=":")
-plt.plot(bdata[:,0],bdata[:,1]-bdata[:,1],label="H-L",linestyle=":")
+plt.plot(bdata[:,0],bdata[:,1]+bdata[:,2],label="H+L",linestyle=":")
+plt.plot(bdata[:,0],bdata[:,1]-bdata[:,2],label="H-L",linestyle=":")
 plt.legend()
 plt.xlabel("Time [ms]")
 plt.ylabel("Strain")

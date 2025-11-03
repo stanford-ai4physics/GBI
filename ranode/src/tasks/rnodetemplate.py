@@ -35,7 +35,7 @@ class RNodeTemplate(
 
     device = luigi.Parameter(default="cuda:0")
     batchsize = luigi.IntParameter(default=2048)
-    epoches = luigi.IntParameter(default=50)
+    epoches = luigi.IntParameter(default=200)
     w_value = luigi.FloatParameter(default=0.05)
     early_stopping_patience = luigi.IntParameter(default=10)
 
