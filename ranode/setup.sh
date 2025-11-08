@@ -32,7 +32,7 @@ action() {
     prompt_user() {
         read -p "Enter the output directory: " user_input1
         read -p "Enter the input directory: " user_input2
-        if [[ -d $user_input1 && -d $user_input2 ]]; then
+        if [[ -n $user_input1 && -n $user_input2 ]]; then
             export OUTPUT_DIR="$user_input1"
             export DATA_DIR="$user_input2"
         else
