@@ -69,7 +69,10 @@ def flows_model_RQS(
 
     model_S = flows.Flow(
         transform=rec_flow_transform, distribution=rec_flow_base_distribution
-    ).to(device)
+    )
+
+    # Convert to float32 before moving to MPS device (Apple Silicon doesn't support float64)
+    model_S = model_S.float().to(device)
 
     return model_S
 

@@ -141,7 +141,9 @@ def bootstrap_and_fit(
         mu_scan_values.reshape(-1, 1) * prob_S_nominal
         + (1 - mu_scan_values.reshape(-1, 1)) * prob_B_nominal
     )
-    log_likelihood_nominal = np.log(likelihood_nominal)
+    # Add epsilon to prevent log(0) = -inf for numerical stability
+    epsilon = 1e-10
+    log_likelihood_nominal = np.log(likelihood_nominal + epsilon)
     log_likelihood_nominal_mean = log_likelihood_nominal.mean(axis=1)
 
     # Now bootstrap classifiers in model_S to get the uncertainty in the likelihood
@@ -162,7 +164,7 @@ def bootstrap_and_fit(
             mu_scan_values.reshape(-1, 1) * prob_S_bootstrap_i
             + (1 - mu_scan_values.reshape(-1, 1)) * prob_B_nominal
         )
-        log_likelihood_bootstrap_i = np.log(likelihood_bootstrap_i)
+        log_likelihood_bootstrap_i = np.log(likelihood_bootstrap_i + epsilon)
         log_likelihood_bootstrap_i_mean = log_likelihood_bootstrap_i.mean(axis=1)
 
         bootstrap_log_likelihood.append(log_likelihood_bootstrap_i_mean)

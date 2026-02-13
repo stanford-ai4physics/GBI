@@ -33,46 +33,20 @@ class ProcessSignal(SignalStrengthMixin, ProcessMixin, BaseTask):
 
     @law.decorator.safe_output
     def run(self):
-        data_dir = os.environ.get("DATA_DIR")
+        # GRAVITATIONAL WAVE MODE: Generate synthetic GW signals instead of loading particle physics data
+        # This adapts R-ANODE methodology to gravitational wave anomaly detection
+        from src.data_prep.gw_processing import process_gw_signals
 
-        if self.use_full_stats:
-            data_path = f"{data_dir}/full_stats_signal_features_W_qq.h5"
-        else:
-            data_path = (
-                f"{data_dir}/lumi_matched_train_val_test_split_signal_features_W_qq.h5"
-            )
+        print(f"[GW MODE] Generating gravitational wave signals with amplitude={self.s_ratio*100}")
 
-        from src.data_prep.signal_processing import process_signals
-
-        self.output()["signals"].parent.touch()
-        train_output = process_signals(
-            data_path,
-            self.mx,
-            self.my,
-            self.s_ratio,
-            self.ensemble,
-            type="x_train",
-        )
-        val_output = process_signals(
-            data_path,
-            self.mx,
-            self.my,
-            self.s_ratio,
-            self.ensemble,
-            type="x_val",
-        )
-        test_output = process_signals(
-            data_path,
-            self.mx,
-            self.my,
-            self.s_ratio,
-            self.ensemble,
-            type="x_test",
-        )
+        # Generate GW signal data dynamically (no external files needed!)
+        # The amplitude is scaled by s_ratio to simulate different signal strengths
+        sig_data = process_gw_signals(amplitude=self.s_ratio * 100.0)
 
         self.output()["signals"].parent.touch()
-        sig_combined = np.concatenate([train_output, val_output, test_output], axis=0)
-        np.save(self.output()["signals"].path, sig_combined)
+        np.save(self.output()["signals"].path, sig_data)
+
+        print(f"[GW MODE] Generated {len(sig_data)} signal events")
 
 
 class ProcessBkg(BaseTask):
@@ -96,28 +70,19 @@ class ProcessBkg(BaseTask):
 
     @law.decorator.safe_output
     def run(self):
-        data_dir = os.environ.get("DATA_DIR")
+        # GRAVITATIONAL WAVE MODE: Generate synthetic GW backgrounds instead of loading QCD data
+        from src.data_prep.gw_processing import process_gw_backgrounds, gw_background_split
 
-        data_path_qcd = f"{data_dir}/events_anomalydetection_v2.features.h5"
-        data_path_extra_qcd = (
-            f"{data_dir}/events_anomalydetection_qcd_extra_inneronly_features.h5"
-        )
+        print("[GW MODE] Generating gravitational wave background events")
 
-        from src.data_prep.bkg_processing import process_bkgs
+        # Generate GW background data dynamically (no external files needed!)
+        gw_bkg_data = process_gw_backgrounds()
 
-        output_qcd = process_bkgs(data_path_qcd)
+        print(f"[GW MODE] Generated {len(gw_bkg_data)} background events")
 
-        if self.use_full_stats:
-            output_extra_qcd = process_bkgs(data_path_extra_qcd)
-            output_combined = np.concatenate([output_qcd, output_extra_qcd], axis=0)
-        else:
-            output_combined = output_qcd
-
-        # split into trainval and test set
-        from src.data_prep.data_prep import background_split
-
-        SR_bkg, CR_bkg = background_split(
-            output_combined,
+        # Split into Signal Region (SR) and Control Region (CR) using GW-adapted splitting
+        SR_bkg, CR_bkg = gw_background_split(
+            gw_bkg_data,
             resample_seed=42,
         )
 
